@@ -102,3 +102,11 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# IDE settings
+.idea/
+
+# Program output files
+output_graph.txt
+edge_steps.csv
+random_walk_2d.png
