@@ -1,109 +1,133 @@
-from tkinter import *
+"""Tkinter front end: build a graph, then run a random walk on it."""
+
+import tkinter as tk
 from tkinter import messagebox
 
-from Graph_from_txt import GraphFromTxt
-from drive import Drive
+import networkx as nx
+
+from graph_builder import GraphBuilder
+from random_walk import RandomWalk
+
+ABOUT_TEXT = (
+    'Random Walks — a cover time explorer.\n\n'
+    'Build a random regular graph, a G(n, m) random graph, or a random tree, '
+    'then choose File → Run Random Walk. A simple random walk runs on the last '
+    'built graph until every node has been visited, and the pop-up at the end '
+    'reports the cover time.'
+)
 
 
-# This is the gui class. Here we init all the gui and start the project.
 class GUI:
-    def __init__(self, root, D):
+    """The main window: graph parameters, build buttons, and the walk menu."""
+
+    def __init__(self, root, builder):
         self.root = root
-        self.D = D
-        root.title("Random Walk")
+        self.builder = builder
+        root.title('Random Walk')
         root.resizable(width=False, height=False)
-        menu = Menu(root)
+        root.geometry('400x250+600+300')
+
+        menu = tk.Menu(root)
         root.config(menu=menu)
-        root.geometry("400x250+600+300")
+        file_menu = tk.Menu(menu, tearoff=0)
+        file_menu.add_command(label='Run Random Walk', command=self.run_walk)
+        file_menu.add_separator()
+        file_menu.add_command(label='Exit', command=root.quit)
+        menu.add_cascade(label='File', menu=file_menu)
+        help_menu = tk.Menu(menu, tearoff=0)
+        help_menu.add_command(label='About', command=self.about)
+        menu.add_cascade(label='Help', menu=help_menu)
 
-        filemenu = Menu(menu, tearoff=0)
-        filemenu.add_command(label='Open...', command=self.build_from_text)
-        filemenu.add_separator()
-        filemenu.add_command(label='Exit', command=root.quit)
-        menu.add_cascade(label='File', menu=filemenu)
-        helpmenu = Menu(menu, tearoff=0)
-        menu.add_cascade(label='Help', menu=helpmenu)
-        helpmenu.add_command(label='About', command=self.about)
+        title = tk.Label(root, text='Choose a graph to build:')
+        title.config(font=('Courier', 14))
+        title.pack()
 
-        label = Label(root, text="Choose which Graph you would like:")
-        label.config(font=("Courier", 14))
-        label.pack()
+        tk.Label(root, text='Nodes').pack(fill=tk.X)
+        self.nodes_entry = tk.Entry(root)
+        self.nodes_entry.pack()
+        tk.Label(root, text='Edges (degree, for a regular graph)').pack(fill=tk.X)
+        self.edges_entry = tk.Entry(root)
+        self.edges_entry.pack()
 
-        l1 = Label(root, text="Nodes")
-        l2 = Label(root, text="Edges (degree, for a regular graph)")
-        self.e1 = Entry(root)
-        self.e2 = Entry(root)
-        l1.pack(fill=X)
-        self.e1.pack()
-        l2.pack(fill=X)
-        self.e2.pack()
+        self.show_walk = tk.IntVar()
+        tk.Checkbutton(root, text='Show the walk', variable=self.show_walk).pack()
 
-        self.show_graph = IntVar()
-        c = Checkbutton(root, text="Show Graph", variable=self.show_graph, onvalue=1, offvalue=0)
-        c.pack()
+        tk.Button(root, text='Regular Graph', command=self.build_regular).pack(fill='none', expand=True)
+        tk.Button(root, text='Random Graph', command=self.build_random).pack(fill='none', expand=True)
+        tk.Button(root, text='Tree Graph', command=self.build_tree).pack(fill='none', expand=True)
 
-        Button(root, text='Regular Graph', command=self.build_regular).pack(fill="none", expand=True)
-        Button(root, text='Random Graph', command=self.build_random).pack(fill="none", expand=True)
-        Button(root, text='Tree Graph', command=self.build_tree).pack(fill="none", expand=True)
-
-    # Here we run the random walk on the most recently built graph.
-    def build_from_text(self):
+    def run_walk(self):
+        """Load the last saved graph and run a random walk on it until it is covered."""
         try:
-            parse = GraphFromTxt()
+            walk = RandomWalk()
         except FileNotFoundError:
             messagebox.showerror('Error!', 'No saved graph found. Please build a graph first.')
             return
-        parse.run_random(self.show_graph.get())
-
-    # This is the about pop up.
-    def about(self):
-        messagebox.showinfo('About', 'Hi and welcome to our Project!\n'
-                            'In here you will find our Random Walk project and can choose in which graph you would like to run.\n'
-                            'You can build a tree, a regular graph and a random graph.\n'
-                            'After that just choose File-->Open and it will open your last built Graph and run random walk on it.')
-
-    # This function builds the tree graph with the given attributes.
-    def build_tree(self):
         try:
-            self.D.update_v(int(self.e1.get()))
-            if self.D.v < 1:
-                messagebox.showerror('Error!', 'Please insert a positive number of nodes!')
-                return
-            self.D.tree_graph()
+            steps = walk.run(self.show_walk.get())
+        except ValueError as err:
+            messagebox.showerror('Error!', str(err))
+            return
+        messagebox.showinfo('Covered!', f'Cover time: {steps} steps\n'
+                                        f'Nodes: {walk.G.number_of_nodes()}\n'
+                                        f'Edges: {walk.G.number_of_edges()}\n'
+                                        f'Density: {nx.density(walk.G):.4f}')
+
+    def about(self):
+        """Show the About pop-up."""
+        messagebox.showinfo('About', ABOUT_TEXT)
+
+    def build_tree(self):
+        """Build a uniformly random tree with the requested number of nodes."""
+        try:
+            v = int(self.nodes_entry.get())
         except ValueError:
             messagebox.showerror('Error!', 'Please insert an integer number of nodes!')
+            return
+        if v < 1:
+            messagebox.showerror('Error!', 'Please insert a positive number of nodes!')
+            return
+        self.builder.v = v
+        self.builder.tree_graph()
 
-    # This function builds the regular graph with the given attributes.
     def build_regular(self):
-        try:
-            self.D.update_v(int(self.e1.get()))
-            self.D.update_e(int(self.e2.get()))
-            if self.D.v < 1 or self.D.e < 0:
-                messagebox.showerror('Error!', 'Please insert a positive number of nodes and a non-negative degree!')
-            elif self.D.e * self.D.v % 2 != 0:
-                messagebox.showerror('Error!', 'In a regular graph v * d must be even!')
-            elif self.D.v <= self.D.e:
-                messagebox.showerror('Error!', 'The degree must be smaller than the number of nodes!')
-            else:
-                self.D.regular_graph()
-        except ValueError:
-            messagebox.showerror('Error!', 'Please insert two integers!')
+        """Build a random d-regular graph after validating the parameters."""
+        params = self._read_parameters()
+        if params is None:
+            return
+        v, d = params
+        if v * d % 2 != 0:
+            messagebox.showerror('Error!', 'In a regular graph, nodes × degree must be even!')
+        elif d >= v:
+            messagebox.showerror('Error!', 'The degree must be smaller than the number of nodes!')
+        else:
+            self.builder.v, self.builder.e = v, d
+            self.builder.regular_graph()
 
-    # This function builds the random graph with the given attributes.
     def build_random(self):
+        """Build a G(n, m) random graph after validating the parameters."""
+        params = self._read_parameters()
+        if params is None:
+            return
+        self.builder.v, self.builder.e = params
+        self.builder.random_graph()
+
+    def _read_parameters(self):
+        """Parse and validate both entry fields; return (nodes, edges) or None."""
         try:
-            self.D.update_v(int(self.e1.get()))
-            self.D.update_e(int(self.e2.get()))
-            if self.D.v < 1 or self.D.e < 0:
-                messagebox.showerror('Error!', 'Please insert a positive number of nodes and a non-negative number of edges!')
-                return
-            self.D.random_graph()
+            v = int(self.nodes_entry.get())
+            e = int(self.edges_entry.get())
         except ValueError:
             messagebox.showerror('Error!', 'Please insert two integers!')
+            return None
+        if v < 1 or e < 0:
+            messagebox.showerror('Error!', 'The number of nodes must be positive '
+                                           'and the second field non-negative!')
+            return None
+        return v, e
 
 
-# Open the gui.
 if __name__ == '__main__':
-    root = Tk()
-    my_gui = GUI(root, Drive())
-    root.mainloop()
+    tk_root = tk.Tk()
+    GUI(tk_root, GraphBuilder())
+    tk_root.mainloop()
